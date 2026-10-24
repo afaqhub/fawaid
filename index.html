@@ -510,11 +510,39 @@ async function bootLoad(){
   catch(e){ busy(false); if(cached && isNetworkError(e)){ toast('لا اتصال — تعرض آخر نسخة محفوظة في جهازك'); return 'offline'; } throw e; }
 }
 
+/** رابط جاهز يربط جهازًا آخر بخادمك: يُفتح فيُسأل مرة واحدة ثم يُحفظ. لا يُقبل إن كان للجهاز خادم مضبوط أصلًا. */
+function linkAnother(){ return location.origin+location.pathname+'#srv='+encodeURIComponent(srv()); }
+function adoptHashServer(){
+  const m=(location.hash||'').match(/(?:^#|&)srv=([^&]+)/); if(!m) return;
+  let u=''; try{ u=decodeURIComponent(m[1]); }catch(e){}
+  const keep=location.hash.slice(1).split('&').filter(x=>x&&!x.startsWith('srv='));
+  try{ history.replaceState(null,'',location.pathname+location.search+(keep.length?'#'+keep.join('&'):'')); }catch(e){}
+  if(srv()||!SERVER_RE.test(u)) return;      // مضبوط مسبقًا: نتجاهل الرابط حمايةً من التوجيه إلى خادم غريب
+  const tail=u.replace(/^https:\/\/script\.google\.com\/macros\/s\//,'').slice(0,14)+'…'+u.slice(-12);
+  if(confirm('هذا الرابط يربط الكُنّاشة بالخادم:\n'+tail+'\n\nاضغط «موافق» فقط إن كان خادمك أنت (أرسلتَه لنفسك).')) setSrv(u);
+}
+
+/** ملف server.txt بجانب الصفحة (فيه رابط الخادم وحده): يعمل لكل الأجهزة والزوار دون تعديل أي كود. */
+async function fileServer(){
+  try{
+    const c=new AbortController(), t=setTimeout(()=>c.abort(),4000);
+    const r=await fetch('server.txt?_='+Date.now(),{cache:'no-store',signal:c.signal}); clearTimeout(t);
+    if(!r.ok) return '';
+    const u=(await r.text()).trim().split(/\s+/)[0];
+    return SERVER_RE.test(u)?u:'';
+  }catch(e){ return ''; }
+}
+
 (async function(){
+  adoptHashServer();
   document.documentElement.dataset.theme = localStorage.getItem('k_theme')||'light';
   document.documentElement.style.setProperty('--fs',(localStorage.getItem('k_fs')||16)+'px');
   loadSession(); loadQueue();
   bindChrome();
+  if(!(SERVER_URL||'').trim()){
+    if(!srv()){ const f=await fileServer(); if(f){ setSrv(f); st.srvFromFile=true; } }
+    else fileServer().then(f=>{ if(!f) return; if(f!==srv()){ setSrv(f); location.reload(); } else st.srvFromFile=true; });   // الملف يغلب المحفوظ
+  }
   if(!srv()){ serverSheet(); return; }          // أول فتح: اطلب رابط الخادم
   try{
     const res=await bootLoad();
@@ -529,7 +557,9 @@ async function bootLoad(){
 /** شاشة إدخال رابط الخادم (تظهر مرة واحدة في كل جهاز) */
 function serverSheet(){
   openSheet(`<div class="shhd"><h3>ربط الكُنّاشة بخادمك</h3></div>
-    <p class="hint">الصق رابط تطبيق الويب الذي نسخته من Apps Script (ينتهي بـ <code>/exec</code>). يُحفظ في هذا الجهاز فقط، ويُطلب مرة واحدة.</p>
+    <p class="hint">الصق رابط تطبيق الويب الذي نسخته من Apps Script (ينتهي بـ <code>/exec</code>). يُحفظ في هذا الجهاز فقط، ويُطلب مرة واحدة في كل جهاز.</p>
+    <p class="hint">💡 <b>لا تريد لصقه في كل جهاز؟</b> بعد أن تتصل مرة، افتح <b>☰ ← لوحة التحكم ← ربط الأجهزة والزوار</b>: تنشئ ملفًا صغيرًا اسمه <code>server.txt</code> على GitHub فتعمل الصفحة على كل الأجهزة ولدى الزوار دون سؤال.</p>
+    <p class="hint">إن كنتَ زائرًا فهذه الصفحة لم تُضبط بعد، فاطلب الرابط الصحيح من صاحبها.</p>
     <label class="fld"><span>رابط الخادم</span>
       <input class="t" id="srvin" dir="ltr" placeholder="https://script.google.com/macros/s/.../exec" value="${esc(srv())}"></label>
     <button class="btn" id="srvgo">اتصال</button>
@@ -1138,7 +1168,33 @@ async function renderAdmin(v){
   v.innerHTML='';
   const pmap={}; P.forEach(p=>pmap[p.name]=p);
 
-  /* الإعدادات أولًا لأنها الأكثر استعمالًا */
+  /* ربط الأجهزة والزوار */
+  const embedded=!!(SERVER_URL||'').trim(), viaFile=!!st.srvFromFile;
+  const lb=el('div','bars','<h4>ربط الأجهزة والزوار</h4>');
+  lb.insertAdjacentHTML('beforeend',`
+    <p class="hint">${(embedded||viaFile)?'✅ رابط الخادم <b>موضوع في الصفحة'+(viaFile?' (ملف server.txt)':'')+'</b>: تعمل على كل جهاز وعند الزوار دون أن يُسأل أحد عنه، وتدخل فقط بكلمة المرور.':'رابط الخادم الآن محفوظ <b>في هذا الجهاز وحده</b> (لأن الصفحة لا تستطيع أن تنقل شيئًا من جهاز إلى آخر)، فيسألك عنه كل جهاز جديد، ويرى الزائر الصفحة غير مضبوطة. الحل مرة واحدة:'}</p>
+    ${(embedded||viaFile)?'':`<details class="more" open><summary>الحل الأسهل: ملف server.txt على GitHub (دقيقة واحدة)</summary>
+      <p class="hint">١. انسخ رابط الخادم:</p>
+      <div class="pre" dir="ltr" id="ln_line" style="word-break:break-all">${esc(srv())}</div>
+      <button class="btn ghost" id="ln_cp" style="margin-top:8px">نسخ الرابط</button>
+      <p class="hint" style="margin-top:8px">٢. افتح <b>github.com</b> ← مستودع <code>kunnasha</code>.<br>
+      ٣. اضغط <b>Add file</b> ← <b>Create new file</b>.<br>
+      ٤. في خانة الاسم اكتب: <code>server.txt</code><br>
+      ٥. في المربع الكبير الصق الرابط (<b>Ctrl+V</b>) — وحده بلا أي كلام آخر.<br>
+      ٦. اضغط <b>Commit changes…</b> ثم <b>Commit changes</b>.<br>
+      ٧. انتظر دقيقة، ثم افتح الكُنّاشة من أي جهاز: تتصل وحدها.</p></details>
+    <details class="more"><summary>أو: رابط سريع لجوالك الآن فقط</summary>
+      <p class="hint">أرسله لنفسك وافتحه من الجوال: يسألك مرة واحدة «هل هذا خادمك؟» فتوافق. (لا يفيد الزوار.)</p>
+      <div class="pre" dir="ltr" id="lk_url" style="word-break:break-all">${esc(linkAnother())}</div>
+      <div class="row2" style="margin-top:8px"><button class="btn" id="lk_cp">نسخ</button><button class="btn ghost" id="lk_sh">إرسال</button></div></details>`}`);
+  v.appendChild(lb);
+  if($('#ln_cp')){
+    $('#ln_cp').onclick=()=>copyText(srv(),'نُسخ رابط الخادم');
+    $('#lk_cp').onclick=()=>copyText(linkAnother(),'نُسخ الرابط');
+    $('#lk_sh').onclick=()=>{ if(navigator.share) navigator.share({title:'رابط كُنّاشتي',url:linkAnother()}).catch(()=>{}); else copyText(linkAnother(),'نُسخ الرابط'); };
+  }
+
+  /* الإعدادات */
   const s=st.cfg||{};
   const tg=(id,label,on)=>`<label class="tgl"><input type="checkbox" id="${id}" ${on?'checked':''}> ${esc(label)}</label>`;
   const sb=el('div','bars','<h4>إعدادات المنصة</h4>');
