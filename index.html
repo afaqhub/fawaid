@@ -313,15 +313,22 @@ input[type=range]{width:100%;accent-color:var(--gold)}
    يُضبط من «الإعدادات» لا من الكود، فالملف نفسه يصلح لأي صاحب منصة.
    ============================================================ */
 
-/* ---------- 1) الاتصال بخادم Google Apps Script ----------
-   ضع رابط الخادم (المنتهي بـ /exec) في السطر التالي، أو اتركه فارغًا
-   فتطلبه المنصة مرة واحدة عند أول فتح وتحفظه في هذا الجهاز.            */
+/* ---------- 1) الاتصال بخادم Google Apps Script ---------- */
+/* ================================================================
+   ⚙️ الإعداد الوحيد المطلوب — ضع رابط السكربت هنا:
 
-const SERVER_URL = '';   // ◀◀◀ اختياري. مثال: 'https://script.google.com/macros/s/AKfy..../exec'
+   انقر نقرتين متتاليتين على العبارة العربية في السطر التالي
+   (الصق_رابط_السكربت_هنا) لتتحدد كلها، ثم اضغط Ctrl+V
+   فيحلّ رابطك (المنتهي بـ /exec) محلّ العبارة. ثم احفظ وارفع الملف.
+   ================================================================ */
+
+const SERVER_URL = 'https://script.google.com/macros/s/AKfycbwbPPduxDfOz_VjOu0yBpFJx2c7oYJ1noYsTZyqknR3TI0Y_APJmp1rtt1M1hHiSYut/exec';
 
 const SRV='k_server', TOK='k_token';
 const SERVER_RE=/^https:\/\/script\.google\.com\/.+\/exec$/;
-function srv(){ return (SERVER_URL||'').trim() || (localStorage.getItem(SRV)||'').trim(); }
+/** الرابط المضمَّن في الملف، وإن بقيت العبارة العربية أو كان غير صالح عُدّ غير مضمَّن. */
+const EMBEDDED_URL=SERVER_RE.test((SERVER_URL||'').trim())?SERVER_URL.trim():'';
+function srv(){ return EMBEDDED_URL || (localStorage.getItem(SRV)||'').trim(); }
 function setSrv(u){ try{localStorage.setItem(SRV,u.trim())}catch(e){} }
 function tok(){ try{return localStorage.getItem(TOK)||''}catch(e){return ''} }
 function setTok(t){ try{ t?localStorage.setItem(TOK,t):localStorage.removeItem(TOK) }catch(e){} }
@@ -539,7 +546,7 @@ async function fileServer(){
   document.documentElement.style.setProperty('--fs',(localStorage.getItem('k_fs')||16)+'px');
   loadSession(); loadQueue();
   bindChrome();
-  if(!(SERVER_URL||'').trim()){
+  if(!EMBEDDED_URL){
     if(!srv()){ const f=await fileServer(); if(f){ setSrv(f); st.srvFromFile=true; } }
     else fileServer().then(f=>{ if(!f) return; if(f!==srv()){ setSrv(f); location.reload(); } else st.srvFromFile=true; });   // الملف يغلب المحفوظ
   }
@@ -1169,26 +1176,31 @@ async function renderAdmin(v){
   const pmap={}; P.forEach(p=>pmap[p.name]=p);
 
   /* ربط الأجهزة والزوار */
-  const embedded=!!(SERVER_URL||'').trim(), viaFile=!!st.srvFromFile;
+  const embedded=!!EMBEDDED_URL, viaFile=!!st.srvFromFile;
   const lb=el('div','bars','<h4>ربط الأجهزة والزوار</h4>');
   lb.insertAdjacentHTML('beforeend',`
-    <p class="hint">${(embedded||viaFile)?'✅ رابط الخادم <b>موضوع في الصفحة'+(viaFile?' (ملف server.txt)':'')+'</b>: تعمل على كل جهاز وعند الزوار دون أن يُسأل أحد عنه، وتدخل فقط بكلمة المرور.':'رابط الخادم الآن محفوظ <b>في هذا الجهاز وحده</b> (لأن الصفحة لا تستطيع أن تنقل شيئًا من جهاز إلى آخر)، فيسألك عنه كل جهاز جديد، ويرى الزائر الصفحة غير مضبوطة. الحل مرة واحدة:'}</p>
-    ${(embedded||viaFile)?'':`<details class="more" open><summary>الحل الأسهل: ملف server.txt على GitHub (دقيقة واحدة)</summary>
+    <p class="hint">${(embedded||viaFile)?'✅ رابط الخادم <b>موضوع في الصفحة'+(viaFile?' (ملف server.txt)':'')+'</b>: تعمل على كل جهاز وعند الزوار دون أن يُسأل أحد عنه، وتدخل فقط بكلمة المرور.':'رابط الخادم الآن محفوظ <b>في هذا الجهاز وحده</b>، فيسألك عنه كل جهاز جديد، ويرى الزائر الصفحة غير مضبوطة. الحل مرة واحدة: ضعه في سطر واحد داخل index.html.'}</p>
+    ${(embedded||viaFile)?'':`<details class="more" open><summary>الطريقة المعتادة: ضع الرابط مكان العبارة العربية داخل index.html</summary>
+      <p class="hint">١. انسخ رابط الخادم:</p>
+      <div class="pre" dir="ltr" id="ln_line2" style="word-break:break-all">${esc(srv())}</div>
+      <button class="btn ghost" id="ln_cp2" style="margin-top:8px">نسخ الرابط</button>
+      <p class="hint" style="margin-top:8px">٢. على GitHub: مستودع <code>kunnasha</code> ← <code>index.html</code> ← ✏️ (Edit).<br>
+      ٣. <b>Ctrl+F</b> وابحث عن <code>الصق_رابط_السكربت_هنا</code>.<br>
+      ٤. انقر على العبارة العربية <b>نقرتين متتاليتين</b> لتتحدد، ثم الصق الرابط (<b>Ctrl+V</b>)، ثم <b>Commit changes</b>.<br>
+      (أو افعل هذا في ملف <code>index.html</code> على جهازك بالمفكرة قبل رفعه.)</p></details>
+    <details class="more"><summary>أو بلا كود: ملف server.txt على GitHub</summary>
       <p class="hint">١. انسخ رابط الخادم:</p>
       <div class="pre" dir="ltr" id="ln_line" style="word-break:break-all">${esc(srv())}</div>
       <button class="btn ghost" id="ln_cp" style="margin-top:8px">نسخ الرابط</button>
-      <p class="hint" style="margin-top:8px">٢. افتح <b>github.com</b> ← مستودع <code>kunnasha</code>.<br>
-      ٣. اضغط <b>Add file</b> ← <b>Create new file</b>.<br>
-      ٤. في خانة الاسم اكتب: <code>server.txt</code><br>
-      ٥. في المربع الكبير الصق الرابط (<b>Ctrl+V</b>) — وحده بلا أي كلام آخر.<br>
-      ٦. اضغط <b>Commit changes…</b> ثم <b>Commit changes</b>.<br>
-      ٧. انتظر دقيقة، ثم افتح الكُنّاشة من أي جهاز: تتصل وحدها.</p></details>
+      <p class="hint" style="margin-top:8px">٢. GitHub ← مستودع <code>kunnasha</code> ← <b>Add file ← Create new file</b>.<br>
+      ٣. الاسم: <code>server.txt</code> — والصق الرابط فيه وحده، ثم <b>Commit changes</b>.</p></details>
     <details class="more"><summary>أو: رابط سريع لجوالك الآن فقط</summary>
       <p class="hint">أرسله لنفسك وافتحه من الجوال: يسألك مرة واحدة «هل هذا خادمك؟» فتوافق. (لا يفيد الزوار.)</p>
       <div class="pre" dir="ltr" id="lk_url" style="word-break:break-all">${esc(linkAnother())}</div>
       <div class="row2" style="margin-top:8px"><button class="btn" id="lk_cp">نسخ</button><button class="btn ghost" id="lk_sh">إرسال</button></div></details>`}`);
   v.appendChild(lb);
   if($('#ln_cp')){
+    $('#ln_cp2').onclick=()=>copyText($('#ln_line2').textContent,'نُسخ الرابط');
     $('#ln_cp').onclick=()=>copyText(srv(),'نُسخ رابط الخادم');
     $('#lk_cp').onclick=()=>copyText(linkAnother(),'نُسخ الرابط');
     $('#lk_sh').onclick=()=>{ if(navigator.share) navigator.share({title:'رابط كُنّاشتي',url:linkAnother()}).catch(()=>{}); else copyText(linkAnother(),'نُسخ الرابط'); };
